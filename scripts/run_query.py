@@ -17,7 +17,7 @@ def fetch(filename, **loc_data):
     return ast.get_source_segment(source, loc_node)
 
 
-def query(source, limit=10, **db_opts):
+def query(source, limit=10, show_source=True, **db_opts):
     with connect(**db_opts) as conn:
         tree = parse_query(source)
         print(tree)
@@ -42,15 +42,16 @@ def query(source, limit=10, **db_opts):
                 + ":"
                 + str(result.col_offset)
             )
-            print(
-                fetch(
-                    result._module.filename,
-                    lineno=result.lineno,
-                    col_offset=result.col_offset,
-                    end_lineno=result.end_lineno,
-                    end_col_offset=result.end_col_offset,
+            if show_source:
+                print(
+                    fetch(
+                        result._module.filename,
+                        lineno=result.lineno,
+                        col_offset=result.col_offset,
+                        end_lineno=result.end_lineno,
+                        end_col_offset=result.end_col_offset,
+                    )
                 )
-            )
 
 
 def main():
@@ -62,6 +63,9 @@ def main():
         default="-",
         help="the file to parse; defaults to stdin",
     )
+    parser.add_argument(
+        "--no-source", default=True, dest="show_source", action="store_false"
+    )
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--dsn", default=DEFAULT_DSN)
     parser.add_argument("--table", default=DEFAULT_TABLE)
@@ -69,6 +73,7 @@ def main():
     with options.source:
         query(
             options.source.read(),
+            show_source=options.show_source,
             limit=options.limit,
             dsn=options.dsn,
             table=options.table,

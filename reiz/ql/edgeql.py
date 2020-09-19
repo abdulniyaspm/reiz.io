@@ -1,3 +1,4 @@
+from abc import ABC
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Sequence, Union
@@ -29,6 +30,13 @@ class QLObject:
     ...
 
 
+def construct(obj):
+    if hasattr(obj, "construct"):
+        return obj.construct()
+    else:
+        return str(obj)
+
+
 class QLLogicOperator(QLObject, Enum):
     IN = auto()
     OR = auto()
@@ -56,15 +64,52 @@ class QLStatement(QLObject):
         return ", ".join(body)
 
 
+@dataclass(unsafe_hash=True)
+class EdgeQLTuple(QLObject):
+    items: List[QLObject]
+
+    def construct(self):
+        return (
+            "("
+            + ", ".join(with_parens(construct(item)) for item in self.items)
+            + ")"
+        )
+
+
+@dataclass(unsafe_hash=True)
+class EdgeQLArray(QLObject):
+    items: List[QLObject]
+
+    def construct(self):
+        return (
+            "["
+            + ", ".join(with_parens(construct(item)) for item in self.items)
+            + "]"
+        )
+
+
+@dataclass(unsafe_hash=True)
+class EdgeQLCall(QLObject):
+    func: str
+    args: List[QLObject]
+
+    def construct(self):
+        return f"{self.func}({', '.join(map(construct, self.args))})"
+
+
 # FIX-ME(low): Maybe use a **kwargs based system for filters
 @dataclass(unsafe_hash=True)
 class FilterItem(QLObject):
-    key: str
-    value: str
+    key: QLObject
+    value: QLObject
     operator: QLCompareOperator = QLCompareOperator.EQUALS
 
     def construct(self):
-        return f".{self.key} {self.operator.construct()} {self.value}"
+        if isinstance(self.key, str):
+            key = f".{self.key}"
+        else:
+            key = construct(self.key)
+        return f"{key} {self.operator.construct()} {construct(self.value)}"
 
 
 @dataclass(unsafe_hash=True)

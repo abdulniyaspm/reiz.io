@@ -27,6 +27,9 @@ from typing import Dict, Iterator, List, Tuple, Union
 from reiz.db.schema import ATOMIC_TYPES, ENUM_TYPES, protected_name
 from reiz.ql.edgeql import (
     CastOf,
+    EdgeQLArray,
+    EdgeQLCall,
+    EdgeQLTuple,
     Filter,
     FilterItem,
     ListOf,
@@ -177,14 +180,30 @@ def convert_edgeql(obj, field=None):
     elif isinstance(obj, QLLogical):
         query = None
         for expression in flatten_logical_expression(obj):
-            value = FilterItem(field, convert_edgeql(expression).construct())
+            value = FilterItem(
+                field, convert_edgeql(expressionm, field).construct()
+            )
             if query is None:
                 query = value
             else:
                 query = Filter(query, value, QLLogicOperator.OR)
         return query
     elif isinstance(obj, QLAny):
-        return ListOf([convert_edgeql(obj.value)])
+        return ListOf([convert_edgeql(obj.value, field)])
+    elif isinstance(obj, QLList):
+        query = FilterItem(EdgeQLCall("count", [f".{field}"]), len(obj.items))
+        if len(obj.items) > 0:
+            left = EdgeQLCall(
+                "array_agg", [EdgeQLCall("enumerate", [f".{field}"])]
+            )
+            right = EdgeQLArray(
+                [
+                    EdgeQLTuple([index, convert_edgeql(query, field)])
+                    for index, query in enumerate(obj.items)
+                ]
+            )
+            query = Filter(query, FilterItem(left, right))
+        return query
     elif isinstance(obj, ATOMIC_TYPES):
         return Prepared(obj)
     else:
@@ -221,6 +240,7 @@ def main():
     tree = parse_query(options.source.read())
     print(tree)
     print(generate_edgeql(tree).construct())
+    options.source.close()
 
 
 if __name__ == "__main__":
